@@ -67,6 +67,8 @@ double luSerial(const vector<vector<double>>& A,
             for (double val : row) cout << setw(8) << val << " ";
             cout << endl;
         }
+
+        cout << "====================================================\n";
     }
 
     return elapsed.count();

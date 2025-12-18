@@ -10,14 +10,18 @@
 
 using namespace std;
 
-vector<vector<double>> generateVector(int n) {
+vector<vector<double>> generateVector(int n, bool safe_data) { //
     vector<vector<double>> A(n, vector<double>(n));
-    // Use fixed seed for reproducibility across runs if needed
-    // But typically only Rank 0 generates, so srand(time(0)) is fine.
     srand(time(0));
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
-            A[i][j] = (rand() % 10) + 1;
+            if (safe_data && i == j) {
+                // Ensure diagonal elements are non-zero (between 1 and 10)
+                A[i][j] = (rand() % 10) + 1; //
+            }
+            else {
+                A[i][j] = (rand() % 10); // Can be 0 for other elements
+            }
         }
     }
     return A;
@@ -84,8 +88,29 @@ int main(int argc, char** argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int vecSize = 20;
+    int vecSize;
+    int numThreads;
+    bool safe_data = false;
+    char safeInput;
 
+    // ============================
+    // User Input (Rank 0 only)
+    // ============================
+    if (rank == 0) {
+        cout << "Enter matrix size : ";
+        cin >> vecSize;
+        cout << "Enable safe data (y/n)? ";
+        cin >> safeInput;
+        safe_data = (safeInput == 'y' || safeInput == 'Y');
+        cout << "Enter number of OpenMP threads: ";
+        cin >> numThreads;
+
+        // Set the number of threads for OpenMP
+        omp_set_num_threads(numThreads);
+    }
+
+
+    MPI_Bcast(&vecSize, 1, MPI_INT, 0, MPI_COMM_WORLD);
     vector<vector<double>> A;
 
     // ============================
@@ -113,18 +138,31 @@ int main(int argc, char** argv)
     // Generate data (rank 0)
     // ============================
     if (rank == 0) {
-        A = generateVector(vecSize);
-
+        A = generateVector(vecSize, safe_data);
+        
         cout << "====================================================\n";
         cout << "LU Decomposition Benchmark | Matrix Size: " << vecSize << "x" << vecSize << "\n";
-        cout << "MPI Processes: " << size << "\n";
+        cout << "MPI Processes: " << size << "OpenMP Threads: " << omp_get_max_threads() << "\n";
+
+        if (vecSize <= 5) {
+             cout << "Matrix A:" << endl;
+            for (int i = 0; i < vecSize; i++) {
+                for (int j = 0; j < vecSize; j++) {
+                    cout << A[i][j] << " ";
+                }
+                cout << endl;
+            }
+        }
+
         cout << "====================================================\n";
 
         cout << "\nRunning Serial Version...\n";
         serial = luSerial(A, L_serial, U_serial);
 
-        cout << "\nRunning OpenMP (Basic) Version...\n";
+
+        cout << "\nRunning OpenMP Version...\n";
         omp_basic = luOMP(A, L_omp, U_omp);
+      
 
         cout << "\nRunning OpenMP (Pivoting) Version...\n";
         omp_piv = luOMP_Pivoting(A, L_omp_piv, U_omp_piv, P);
@@ -156,7 +194,7 @@ int main(int argc, char** argv)
     // Final comparison (rank 0)
     // ============================
     if (rank == 0) {
-
+        cout << "\nRunning Relative Residual......" << endl;
         // ---- Relative Residuals ----
         double res_serial = relativeResidual(A, L_serial, U_serial);
         double res_omp = relativeResidual(A, L_omp, U_omp);
@@ -190,6 +228,7 @@ int main(int argc, char** argv)
 
         // ---- Efficiency ----
         cout << "\n--- Efficiency ---\n";
+
         cout << "OpenMP Basic Efficiency: " << (serial / omp_basic) / omp_get_max_threads() << "\n";
         cout << "OpenMP Piv Efficiency:   " << (serial / omp_piv) / omp_get_max_threads() << "\n";
         cout << "MPI LU Efficiency:    "

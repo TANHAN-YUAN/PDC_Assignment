@@ -5,3 +5,6 @@ How to Fix it:
 3) Change Platform Toolset To v143 (or another installed version)
 4) Click Apply → OK
 5) Rebuild the project
+
+
+ENBLE SAFA DATA FEATURES-generates safe data for CA-LU run under safe conditions

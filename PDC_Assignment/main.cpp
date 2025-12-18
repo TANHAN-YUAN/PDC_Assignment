@@ -51,6 +51,20 @@ double relativeResidual(const vector<vector<double>>& A,
     return sqrt(normR) / sqrt(normA);
 }
 
+double residualPivoted(const vector<vector<double>>& A,
+    const vector<vector<double>>& L,
+    const vector<vector<double>>& U,
+    const vector<int>& P)
+{
+    int n = A.size();
+    vector<vector<double>> PA(n, vector<double>(n));
+    // Reorder A based on permutation vector P
+    for (int i = 0; i < n; i++) {
+        PA[i] = A[P[i]];
+    }
+    return relativeResidual(PA, L, U);
+}
+
 
 int main(int argc, char** argv)
 {
@@ -59,7 +73,8 @@ int main(int argc, char** argv)
     // ============================
     double serial = 0.0;
     double omp = 0.0;
-
+    double omp_basic = 0.0;
+    double omp_piv = 0.0;
     double mpi = 0.0;
     double ca = 0.0;
 
@@ -81,6 +96,13 @@ int main(int argc, char** argv)
     vector<vector<double>> L_serial(vecSize, vector<double>(vecSize));
     vector<vector<double>> U_serial(vecSize, vector<double>(vecSize));
 
+    vector<vector<double>> L_omp(vecSize, vector<double>(vecSize));
+    vector<vector<double>> U_omp(vecSize, vector<double>(vecSize));
+
+    vector<vector<double>> L_omp_piv(vecSize, vector<double>(vecSize));
+    vector<vector<double>> U_omp_piv(vecSize, vector<double>(vecSize));
+    vector<int> P; 
+
     vector<vector<double>> L_mpi(vecSize, vector<double>(vecSize));
     vector<vector<double>> U_mpi(vecSize, vector<double>(vecSize));
 
@@ -101,6 +123,11 @@ int main(int argc, char** argv)
         cout << "\nRunning Serial Version...\n";
         serial = luSerial(A, L_serial, U_serial);
 
+        cout << "\nRunning OpenMP (Basic) Version...\n";
+        omp_basic = luOMP(A, L_omp, U_omp);
+
+        cout << "\nRunning OpenMP (Pivoting) Version...\n";
+        omp_piv = luOMP_Pivoting(A, L_omp_piv, U_omp_piv, P);
 
     }
    
@@ -125,11 +152,6 @@ int main(int argc, char** argv)
     ca = luMPI_CA(A, L_ca, U_ca, vecSize, rank, size);
 
     MPI_Finalize();
- 
-
-    vector<vector<double>> L_omp(vecSize, vector<double>(vecSize));
-    vector<vector<double>> U_omp(vecSize, vector<double>(vecSize));
-
     // ============================
     // Final comparison (rank 0)
     // ============================
@@ -138,30 +160,38 @@ int main(int argc, char** argv)
         // ---- Relative Residuals ----
         double res_serial = relativeResidual(A, L_serial, U_serial);
         double res_omp = relativeResidual(A, L_omp, U_omp);
+        double res_omp_piv = residualPivoted(A, L_omp_piv, U_omp_piv, P);
         double res_mpi = relativeResidual(A, L_mpi, U_mpi);
         double res_ca = relativeResidual(A, L_ca, U_ca);
 
-        cout << "\n--- Final Results & Relative Residuals ---\n";
+        cout << "\n--- Final Results ---\n";
 
         cout << fixed << setprecision(6);
         cout << "Serial LU Time: " << serial << " s\n";
-        cout << "OMP LU Time: " << omp << " s\n";
+        cout << "OpenMP Basic Time:   " << omp_basic << " s\n";
+        cout << "OpenMP Pivoting Time: " << omp_piv << " s\n";
         cout << "MPI LU Time:    " << mpi << " s\n";
         cout << "CA-LU Time:     " << ca << " s\n";
 
+        cout << "\n--- Relative Residuals ---\n";
         cout << scientific << setprecision(3);
         cout << "Serial LU Residual: " << res_serial << "\n";
-        cout << "Serial LU Residual: " << res_serial << "\n";
+        cout << "OpenMP Basic Residual: " << res_omp << "\n";
+        cout << "OpenMP Piv Residual:  " << res_omp_piv << "\n";
         cout << "MPI LU Residual:    " << res_mpi << "\n";
         cout << "CA-LU Residual:     " << res_ca << "\n";
 
         // ---- Speedup ----
         cout << "\n--- Speedup (vs Serial) ---\n";
+        cout << "OpenMP Basic Speedup:  " << serial / omp_basic << "x\n";
+        cout << "OpenMP Piv Speedup:    " << serial / omp_piv << "x\n";
         cout << "MPI LU Speedup:    " << serial / mpi << "\n";
         cout << "CA-LU Speedup:     " << serial / ca << "\n";
 
         // ---- Efficiency ----
         cout << "\n--- Efficiency ---\n";
+        cout << "OpenMP Basic Efficiency: " << (serial / omp_basic) / omp_get_max_threads() << "\n";
+        cout << "OpenMP Piv Efficiency:   " << (serial / omp_piv) / omp_get_max_threads() << "\n";
         cout << "MPI LU Efficiency:    "
             << (serial / mpi) / size << "\n";
         cout << "CA-LU Efficiency:     "

@@ -150,7 +150,7 @@ int main(int argc, char** argv)
         << size << " processes...\n";
 
     ca = luMPI_CA(A, L_ca, U_ca, vecSize, rank, size);
-
+ 
     MPI_Finalize();
     // ============================
     // Final comparison (rank 0)

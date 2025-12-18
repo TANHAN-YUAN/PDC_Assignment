@@ -308,5 +308,5 @@ double luMPI_CA(
     }
 
     return time;
+   
 }
-

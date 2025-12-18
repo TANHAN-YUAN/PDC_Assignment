@@ -3,6 +3,8 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <iomanip>
+
 
 using namespace std;
 
@@ -38,9 +40,28 @@ double luOMP(
             }
         }
     }
+    
+
 
     double end = omp_get_wtime() - start;
-    cout << "[OpenMP Basic] Time taken: " << end << " seconds." << endl; //
+    cout << "[OpenMP Basic] Time taken: " << end << " seconds." << endl; 
+    if (n <= 5) {
+        cout << "L matrix (OpenMP Basic):\n";
+        for (const auto& row : L) {
+            for (double val : row)
+                cout << setw(8) << fixed << setprecision(2) << val << " ";
+            cout << endl;
+        }
+
+        cout << "U matrix (OpenMP Basic):\n";
+        for (const auto& row : U) {
+            for (double val : row)
+                cout << setw(8) << fixed << setprecision(2) << val << " ";
+            cout << endl;
+        }
+        cout << "====================================================\n";
+    }
+
     return end;
 }
 
@@ -87,9 +108,31 @@ double luOMP_Pivoting(const vector<vector<double>>& A, vector<vector<double>>& L
             }
         }
     }
-
     double end = omp_get_wtime() - start;
 
-    cout << "[OpenMP Pivoting] Time taken: " << end << " seconds." << endl; //
+
+
+    cout << "[OpenMP Pivoting] Time taken: " << end << " seconds." << endl; 
+    if (n <= 5) {
+        cout << "L matrix (OpenMP Pivoting):\n";
+        for (const auto& row : L) {
+            for (double val : row)
+                cout << setw(8) << fixed << setprecision(2) << val << " ";
+            cout << endl;
+        }
+
+        cout << "U matrix (OpenMP Pivoting):\n";
+        for (const auto& row : U) {
+            for (double val : row)
+                cout << setw(8) << fixed << setprecision(2) << val << " ";
+            cout << endl;
+        }
+
+        cout << "Permutation vector P:\n";
+        for (int p : P) cout << p << " ";
+        cout << endl;
+        cout << "====================================================\n";
+    }
+
     return end;
 }

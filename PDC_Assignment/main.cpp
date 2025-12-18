@@ -138,18 +138,31 @@ int main(int argc, char** argv)
     // Generate data (rank 0)
     // ============================
     if (rank == 0) {
-        A = generateVector(vecSize, safe_data); //
-
+        A = generateVector(vecSize, safe_data);
+        
         cout << "====================================================\n";
         cout << "LU Decomposition Benchmark | Matrix Size: " << vecSize << "x" << vecSize << "\n";
-        cout << "MPI Processes: " << size << "\n";
+        cout << "MPI Processes: " << size << "OpenMP Threads: " << omp_get_max_threads() << "\n";
+
+        if (vecSize <= 5) {
+             cout << "Matrix A:" << endl;
+            for (int i = 0; i < vecSize; i++) {
+                for (int j = 0; j < vecSize; j++) {
+                    cout << A[i][j] << " ";
+                }
+                cout << endl;
+            }
+        }
+
         cout << "====================================================\n";
 
         cout << "\nRunning Serial Version...\n";
         serial = luSerial(A, L_serial, U_serial);
 
-        cout << "\nRunning OpenMP (Basic) Version...\n";
+
+        cout << "\nRunning OpenMP Version...\n";
         omp_basic = luOMP(A, L_omp, U_omp);
+      
 
         cout << "\nRunning OpenMP (Pivoting) Version...\n";
         omp_piv = luOMP_Pivoting(A, L_omp_piv, U_omp_piv, P);

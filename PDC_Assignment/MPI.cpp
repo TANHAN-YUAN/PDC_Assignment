@@ -118,6 +118,7 @@ double luMPI(const vector<vector<double>>& A_in,
                 for (double val : row) cout << setw(8) << val << " ";
                 cout << endl;
             }
+            cout << "====================================================\n";
         }
     }
 
@@ -288,6 +289,24 @@ double luMPI_CA(const vector<vector<double>>& A_in,
                 }
             }
         }
+
+        // ===== PRINT MATRICES IF SMALL =====
+        if (n <= 5) {
+            cout << "L matrix (MPI CA-LU):\n";
+            for (const auto& row : L_out) {
+                for (double val : row)
+                    cout << setw(8) << fixed << setprecision(2) << val << " ";
+                cout << endl;
+            }
+
+            cout << "U matrix (MPI CA-LU):\n";
+            for (const auto& row : U_out) {
+                for (double val : row)
+                    cout << setw(8) << fixed << setprecision(2) << val << " ";
+                cout << endl;
+            }
+        }
+        cout << "====================================================\n";
     }
 
     return time;

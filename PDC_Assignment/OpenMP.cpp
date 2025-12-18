@@ -39,7 +39,9 @@ double luOMP(
         }
     }
 
-    return omp_get_wtime() - start;
+    double end = omp_get_wtime() - start;
+    cout << "[OpenMP Basic] Time taken: " << end << " seconds." << endl; //
+    return end;
 }
 
 
@@ -86,5 +88,8 @@ double luOMP_Pivoting(const vector<vector<double>>& A, vector<vector<double>>& L
         }
     }
 
-    return omp_get_wtime() - start;
+    double end = omp_get_wtime() - start;
+
+    cout << "[OpenMP Pivoting] Time taken: " << end << " seconds." << endl; //
+    return end;
 }

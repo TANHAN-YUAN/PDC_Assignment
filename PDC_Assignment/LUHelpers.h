@@ -31,7 +31,7 @@ double luMPI_CA(const vector<vector<double>>& A_in,
     int n, int rank, int size);
 
 // Helper functions
-vector<vector<double>> generateVector(int n);
+vector<vector<double>> generateVector(int n, bool safe_data );
 double relativeResidual(const vector<vector<double>>& A,
     const vector<vector<double>>& L,
     const vector<vector<double>>& U);

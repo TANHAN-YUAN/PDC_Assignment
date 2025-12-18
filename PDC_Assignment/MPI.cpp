@@ -124,32 +124,31 @@ double luMPI(const vector<vector<double>>& A_in,
     return time;
 }
 
-double luMPI_CA(const vector<vector<double>>& A_in,
+double luMPI_CA(
+    const vector<vector<double>>& A_in,
     vector<vector<double>>& L_out,
     vector<vector<double>>& U_out,
     int n, int rank, int size)
 {
-    // ==============================
-    // Start wall-clock timer
-    // ==============================
+    const int b = 8;                 // panel width (small = more stable)
+    const double EPS = 1e-12;        // pivot safety threshold
+
     double start_time = MPI_Wtime();
 
-    // Panel width (controls communication vs computation)
-    const int b = 32;
+    // -----------------------------
+    // Validate MPI layout
+    // -----------------------------
+    if (n % size != 0) {
+        if (rank == 0)
+            cerr << "[CA-LU Error] Matrix size must be divisible by MPI size\n";
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
 
     int rows_per_proc = n / size;
 
-    // ==============================
-    // Input validation
-    // ==============================
-    if (n % size != 0 && rank == 0) {
-        cerr << "[MPI Error] N must be divisible by number of processes.\n";
-        return 0.0;
-    }
-
-    // ==============================
+    // -----------------------------
     // Flatten matrix on rank 0
-    // ==============================
+    // -----------------------------
     vector<double> flatA;
     if (rank == 0) {
         flatA.resize(n * n);
@@ -158,56 +157,64 @@ double luMPI_CA(const vector<vector<double>>& A_in,
                 flatA[i * n + j] = A_in[i][j];
     }
 
-    // ==============================
-    // Scatter rows to processes
-    // ==============================
+    // -----------------------------
+    // Scatter rows
+    // -----------------------------
     vector<double> localA(rows_per_proc * n);
-    MPI_Scatter(flatA.data(), rows_per_proc * n, MPI_DOUBLE,
-        localA.data(), rows_per_proc * n, MPI_DOUBLE,
-        0, MPI_COMM_WORLD);
+    MPI_Scatter(
+        flatA.data(),
+        rows_per_proc * n,
+        MPI_DOUBLE,
+        localA.data(),
+        rows_per_proc * n,
+        MPI_DOUBLE,
+        0,
+        MPI_COMM_WORLD
+    );
 
-    // ==============================
-    // Buffer for panel broadcast
-    // ==============================
+    // Buffer to broadcast panels
     vector<double> panel(b * n);
 
-    // ==============================
+    // =============================
     // CA-LU Factorization
-    // ==============================
+    // =============================
     for (int k = 0; k < n; k += b) {
 
-        // End column of current panel
         int panel_end = min(k + b, n);
 
-        // Process that owns the panel rows
+        // Which rank owns the pivot rows?
         int owner = k / rows_per_proc;
 
-        // ==========================
-        // Panel Factorization (Owner)
-        // ==========================
+        // -----------------------------
+        // Panel factorization (owner)
+        // -----------------------------
         if (rank == owner) {
 
-            // Factorize panel locally
             for (int i = k; i < panel_end; i++) {
+
                 int local_i = (i % rows_per_proc) * n;
 
-                // Eliminate previous columns in panel
-                for (int j = k; j < i; j++) {
+                // Pivot check
+                double pivot = localA[local_i + i];
+                if (fabs(pivot) < EPS) {
+                    cerr << "[CA-LU Error] Zero pivot at row " << i << endl;
+                    MPI_Abort(MPI_COMM_WORLD, 2);
+                }
 
-                    // Compute L(i,j)
-                    localA[local_i + j] /=
-                        localA[(j % rows_per_proc) * n + j];
+                // Compute multipliers
+                for (int r = i + 1; r < panel_end; r++) {
+                    int local_r = (r % rows_per_proc) * n;
+                    localA[local_r + i] /= pivot;
 
-                    // Update U(i,j+1 : panel_end)
-                    for (int col = j + 1; col < panel_end; col++) {
-                        localA[local_i + col] -=
-                            localA[local_i + j] *
-                            localA[(j % rows_per_proc) * n + col];
+                    // Update U entries inside panel
+                    for (int c = i + 1; c < panel_end; c++) {
+                        localA[local_r + c] -=
+                            localA[local_r + i] * localA[local_i + c];
                     }
                 }
             }
 
-            // Copy panel rows into contiguous buffer
+            // Copy panel rows into buffer
             for (int i = k; i < panel_end; i++) {
                 int local_i = (i % rows_per_proc) * n;
                 for (int j = 0; j < n; j++) {
@@ -216,59 +223,69 @@ double luMPI_CA(const vector<vector<double>>& A_in,
             }
         }
 
-        // ==========================
-        // Broadcast panel once
-        // ==========================
-        MPI_Bcast(panel.data(),
+        // -----------------------------
+        // Broadcast panel
+        // -----------------------------
+        MPI_Bcast(
+            panel.data(),
             (panel_end - k) * n,
             MPI_DOUBLE,
             owner,
-            MPI_COMM_WORLD);
+            MPI_COMM_WORLD
+        );
 
-        // ==========================
+        // -----------------------------
         // Trailing matrix update
-        // ==========================
+        // -----------------------------
         for (int i = 0; i < rows_per_proc; i++) {
+
             int global_i = rank * rows_per_proc + i;
+            if (global_i < panel_end) continue;
 
-            // Only rows below the panel
-            if (global_i >= panel_end) {
+            int local_idx = i * n;
 
-                int local_idx = i * n;
+            for (int p = k; p < panel_end; p++) {
 
-                for (int p = k; p < panel_end; p++) {
+                double pivot = panel[(p - k) * n + p];
+                if (fabs(pivot) < EPS) {
+                    cerr << "[CA-LU Error] Zero pivot broadcast at " << p << endl;
+                    MPI_Abort(MPI_COMM_WORLD, 3);
+                }
 
-                    // Compute L(i,p)
-                    double scale =
-                        localA[local_idx + p] /
-                        panel[(p - k) * n + p];
+                double multiplier =
+                    localA[local_idx + p] / pivot;
 
-                    localA[local_idx + p] = scale;
+                localA[local_idx + p] = multiplier;
 
-                    // Update U(i, panel_end:n)
-                    for (int j = panel_end; j < n; j++) {
-                        localA[local_idx + j] -=
-                            scale * panel[(p - k) * n + j];
-                    }
+                for (int j = panel_end; j < n; j++) {
+                    localA[local_idx + j] -=
+                        multiplier * panel[(p - k) * n + j];
                 }
             }
         }
     }
 
-    // ==============================
+    // =============================
     // Gather final matrix
-    // ==============================
-    MPI_Gather(localA.data(), rows_per_proc * n, MPI_DOUBLE,
-        flatA.data(), rows_per_proc * n, MPI_DOUBLE,
-        0, MPI_COMM_WORLD);
+    // =============================
+    MPI_Gather(
+        localA.data(),
+        rows_per_proc * n,
+        MPI_DOUBLE,
+        flatA.data(),
+        rows_per_proc * n,
+        MPI_DOUBLE,
+        0,
+        MPI_COMM_WORLD
+    );
 
     double time = MPI_Wtime() - start_time;
 
-    // ==============================
+    // =============================
     // Reconstruct L and U (rank 0)
-    // ==============================
+    // =============================
     if (rank == 0) {
-        cout << "[CA-LU MPI] Time taken: " << time << " seconds.\n";
+        cout << "[CA-LU MPI] Time taken: " << time << " seconds\n";
 
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < n; j++) {
@@ -291,116 +308,5 @@ double luMPI_CA(const vector<vector<double>>& A_in,
     }
 
     return time;
-   
-}
-
-
-
-vector<vector<double>> generateVector(int n) {
-    vector<vector<double>> A(n, vector<double>(n));
-    // Use fixed seed for reproducibility across runs if needed
-    // But typically only Rank 0 generates, so srand(time(0)) is fine.
-    srand(time(0));
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            A[i][j] = rand() % 10 + 1;
-        }
-    }
-    return A;
-}
-
-int main(int argc, char** argv)
-{
-    // ============================
-    // Initialize timers
-    // ============================
-    double serial = 0.0;
-    double mpi = 0.0;
-    double ca = 0.0;
-
-    MPI_Init(&argc, &argv);
-
-    int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    int vecSize = 4;
-
-    vector<vector<double>> A;
-
-    // ============================
-    // Output matrices
-    // ============================
-    vector<vector<double>> L_serial(vecSize, vector<double>(vecSize));
-    vector<vector<double>> U_serial(vecSize, vector<double>(vecSize));
-
-    vector<vector<double>> L_mpi(vecSize, vector<double>(vecSize));
-    vector<vector<double>> U_mpi(vecSize, vector<double>(vecSize));
-
-    vector<vector<double>> L_ca(vecSize, vector<double>(vecSize));
-    vector<vector<double>> U_ca(vecSize, vector<double>(vecSize));
-
-    // ============================
-    // Generate data (rank 0)
-    // ============================
-    if (rank == 0) {
-        A = generateVector(vecSize);
-
-        cout << "--- Processing Matrix Size " << vecSize << " ---\n";
-
-    }
-
-    // ============================
-    // Standard MPI LU
-    // ============================
-    MPI_Barrier(MPI_COMM_WORLD);
-    if (rank == 0)
-        cout << "\nRunning MPI LU Version on "
-        << size << " processes...\n";
-
-    mpi = luMPI(A, L_mpi, U_mpi, vecSize, rank, size);
-
-    // ============================
-    // CA-LU MPI
-    // ============================
-    MPI_Barrier(MPI_COMM_WORLD);
-    if (rank == 0)
-        cout << "\nRunning CA-LU MPI Version on "
-        << size << " processes...\n";
-
-    ca = luMPI_CA(A, L_ca, U_ca, vecSize, rank, size);
-
-    MPI_Finalize();
-
-    // ============================
-// Final comparison (rank 0)
-// ============================
-    if (rank == 0) {
-        cout << "\n--- Final Results ---\n";
-
-        cout << "Serial LU: " << serial << " s\n";
-        cout << "MPI LU:    " << mpi << " s\n";
-        cout << "CA-LU MPI: " << ca << " s\n";
-
-        cout << "\n--- Speedup (vs Serial) ---\n";
-        cout << "MPI LU Speedup:    " << serial / mpi << "\n";
-        cout << "CA-LU Speedup:     " << serial / ca << "\n";
-
-        cout << "\n--- Efficiency ---\n";
-        cout << "MPI LU Efficiency:    "
-            << (serial / mpi) / size << "\n";
-        cout << "CA-LU Efficiency:     "
-            << (serial / ca) / size << "\n";
-
-        // ============================
-        // MPI vs CA-LU comparison
-        // ============================
-        cout << "\n--- MPI vs CA-LU Comparison ---\n";
-
-        cout << "CA-LU speedup over MPI: "
-            << mpi / ca << "x\n";
-    }
-
-    return 0;
 }
 

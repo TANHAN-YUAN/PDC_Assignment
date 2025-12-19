@@ -17,9 +17,12 @@ double luOMP(
     vector<vector<double>>& L,
     vector<vector<double>>& U
 ) {
-    int n = A.size();
-    U = A; // Initialize U as A
 
+    int n = A.size();
+    
+
+    double start = omp_get_wtime();
+    U = A; // Initialize U as A
     // Initialize L as Identity Matrix
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
@@ -27,7 +30,8 @@ double luOMP(
         }
     }
 
-    double start = omp_get_wtime();
+
+
 
     for (int k = 0; k < n; k++) {
         // Parallelize the row updates

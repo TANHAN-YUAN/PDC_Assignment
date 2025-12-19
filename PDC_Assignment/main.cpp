@@ -160,7 +160,7 @@ int main(int argc, char** argv)
         
         cout << "====================================================\n";
         cout << "LU Decomposition Benchmark | Matrix Size: " << vecSize << "x" << vecSize << "\n";
-        cout << "MPI Processes: " << size << "OpenMP Threads: " << omp_get_max_threads() << "\n";
+        cout << "MPI Processes: " << size << " | OpenMP Threads: " << omp_get_max_threads() << "\n";
 
         if (vecSize <= 5) {
              cout << "Matrix A:" << endl;

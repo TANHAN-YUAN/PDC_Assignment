@@ -182,89 +182,75 @@ double luMPI_CA(
     for (int k = 0; k < n; k += b) {
 
         int panel_end = min(k + b, n);
-
-        // Which rank owns the pivot rows?
         int owner = k / rows_per_proc;
 
-        // -----------------------------
-        // Panel factorization (owner)
-        // -----------------------------
+        // ============================
+        // PANEL FACTORIZATION
+        // ============================
         if (rank == owner) {
 
-            for (int i = k; i < panel_end; i++) {
+            for (int col = k; col < panel_end; col++) {
 
-                int local_i = (i % rows_per_proc) * n;
+                int local_col = (col % rows_per_proc) * n;
+                double pivot = localA[local_col + col];
 
-                // Pivot check
-                double pivot = localA[local_i + i];
                 if (fabs(pivot) < EPS) {
-                    cerr << "[CA-LU Error] Zero pivot at row " << i << endl;
-                    MPI_Abort(MPI_COMM_WORLD, 2);
+                    cerr << "[CA-LU Error] Zero pivot at " << col << endl;
+                    MPI_Abort(MPI_COMM_WORLD, 1);
                 }
 
-                // Compute multipliers
-                for (int r = i + 1; r < panel_end; r++) {
-                    int local_r = (r % rows_per_proc) * n;
-                    localA[local_r + i] /= pivot;
+                // Eliminate rows BELOW pivot
+                for (int r = col + 1; r < n; r++) {
 
-                    // Update U entries inside panel
-                    for (int c = i + 1; c < panel_end; c++) {
-                        localA[local_r + c] -=
-                            localA[local_r + i] * localA[local_i + c];
+                    int owner_r = r / rows_per_proc;
+                    if (owner_r != rank) continue;
+
+                    int local_r = (r % rows_per_proc) * n;
+                    double multiplier = localA[local_r + col] / pivot;
+                    localA[local_r + col] = multiplier;
+
+                    for (int j = col + 1; j < panel_end; j++) {
+                        localA[local_r + j] -=
+                            multiplier * localA[local_col + j];
                     }
                 }
             }
 
-            // Copy panel rows into buffer
+            // Copy panel rows
             for (int i = k; i < panel_end; i++) {
                 int local_i = (i % rows_per_proc) * n;
-                for (int j = 0; j < n; j++) {
+                for (int j = 0; j < n; j++)
                     panel[(i - k) * n + j] = localA[local_i + j];
-                }
             }
         }
 
-        // -----------------------------
-        // Broadcast panel
-        // -----------------------------
-        MPI_Bcast(
-            panel.data(),
-            (panel_end - k) * n,
-            MPI_DOUBLE,
-            owner,
-            MPI_COMM_WORLD
-        );
+        MPI_Bcast(panel.data(), (panel_end - k) * n,
+            MPI_DOUBLE, owner, MPI_COMM_WORLD);
 
-        // -----------------------------
-        // Trailing matrix update
-        // -----------------------------
+        // ============================
+        // TRAILING UPDATE
+        // ============================
         for (int i = 0; i < rows_per_proc; i++) {
 
             int global_i = rank * rows_per_proc + i;
             if (global_i < panel_end) continue;
 
-            int local_idx = i * n;
+            int local_i = i * n;
 
             for (int p = k; p < panel_end; p++) {
 
                 double pivot = panel[(p - k) * n + p];
-                if (fabs(pivot) < EPS) {
-                    cerr << "[CA-LU Error] Zero pivot broadcast at " << p << endl;
-                    MPI_Abort(MPI_COMM_WORLD, 3);
-                }
-
-                double multiplier =
-                    localA[local_idx + p] / pivot;
-
-                localA[local_idx + p] = multiplier;
+                double multiplier = localA[local_i + p] / pivot;
+                localA[local_i + p] = multiplier;
 
                 for (int j = panel_end; j < n; j++) {
-                    localA[local_idx + j] -=
+                    localA[local_i + j] -=
                         multiplier * panel[(p - k) * n + j];
                 }
             }
         }
     }
+
 
     // =============================
     // Gather final matrix

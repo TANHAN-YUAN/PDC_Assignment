@@ -1,3 +1,5 @@
+https://github.com/TANHAN-YUAN/PDC_Assignment.git
+
 IF Erroe Code "MSB8020" ouccr the bulid tools for v145 cannot be found.
 How to Fix it:
 1) Right-click the project → Properties
@@ -5,3 +7,6 @@ How to Fix it:
 3) Change Platform Toolset To v143 (or another installed version)
 4) Click Apply → OK
 5) Rebuild the project
+
+
+ENBLE SAFA DATA FEATURES-generates safe data for CA-LU run under safe conditions

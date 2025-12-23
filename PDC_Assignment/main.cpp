@@ -10,20 +10,38 @@
 
 using namespace std;
 
-vector<vector<double>> generateVector(int n, bool safe_data) { //
+vector<vector<double>> generateVector(int n, bool safe_data) {
     vector<vector<double>> A(n, vector<double>(n));
-    srand(time(0));
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            if (safe_data && i == j) {
-                // Ensure diagonal elements are non-zero (between 1 and 10)
-                A[i][j] = (rand() % 10) + 1; //
-            }
-            else {
-                A[i][j] = (rand() % 10); // Can be 0 for other elements
+
+    srand(time(nullptr));
+
+    if (!safe_data) {
+        // Original random matrix (NOT safe for no-pivot LU)
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                A[i][j] = rand() % 10;
             }
         }
+        return A;
     }
+
+    // ==============================
+    // SAFE DATA: Diagonally dominant
+    // ==============================
+    for (int i = 0; i < n; i++) {
+        double row_sum = 0.0;
+
+        for (int j = 0; j < n; j++) {
+            if (i != j) {
+                A[i][j] = (rand() % 5) + 1;  // small off-diagonal values
+                row_sum += abs(A[i][j]);
+            }
+        }
+
+        // Strong diagonal dominance
+        A[i][i] = row_sum + (rand() % 5) + 1;
+    }
+
     return A;
 }
 
@@ -142,7 +160,7 @@ int main(int argc, char** argv)
         
         cout << "====================================================\n";
         cout << "LU Decomposition Benchmark | Matrix Size: " << vecSize << "x" << vecSize << "\n";
-        cout << "MPI Processes: " << size << "OpenMP Threads: " << omp_get_max_threads() << "\n";
+        cout << "MPI Processes: " << size << " | OpenMP Threads: " << omp_get_max_threads() << "\n";
 
         if (vecSize <= 5) {
              cout << "Matrix A:" << endl;

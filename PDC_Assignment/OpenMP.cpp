@@ -76,12 +76,13 @@ double luOMP_Pivoting(const vector<vector<double>>& A, vector<vector<double>>& L
     P.resize(n);
     for (int i = 0; i < n; i++) P[i] = i; // Initial permutation
 
+
+double start = omp_get_wtime();
+
     // Initialize L
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) L[i][j] = (i == j) ? 1.0 : 0.0;
     }
-
-    double start = omp_get_wtime();
 
     for (int k = 0; k < n; k++) {
         // --- Step 1: Partial Pivoting (Serial Search is safer) ---

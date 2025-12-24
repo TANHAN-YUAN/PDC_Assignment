@@ -37,10 +37,10 @@ double luOMP(
         // Parallelize the row updates
 #pragma omp parallel for schedule(static)
         for (int i = k + 1; i < n; i++) {
-            double factor = U[i][k] / U[k][k];
-            L[i][k] = factor;
+            double mutipler = U[i][k] / U[k][k];
+            L[i][k] = mutipler;
             for (int j = k; j < n; j++) {
-                U[i][j] -= factor * U[k][j];
+                U[i][j] -= mutipler * U[k][j];
             }
         }
     }
@@ -105,10 +105,10 @@ double luOMP_Pivoting(const vector<vector<double>>& A, vector<vector<double>>& L
         // --- Step 2: Parallel Elimination ---
 #pragma omp parallel for schedule(static)
         for (int i = k + 1; i < n; i++) {
-            double factor = U[i][k] / U[k][k];
-            L[i][k] = factor;
+            double mutipler = U[i][k] / U[k][k];
+            L[i][k] = mutipler;
             for (int j = k; j < n; j++) {
-                U[i][j] -= factor * U[k][j];
+                U[i][j] -= mutipler * U[k][j];
             }
         }
     }
